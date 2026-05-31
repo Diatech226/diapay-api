@@ -1,0 +1,90 @@
+openapi: 3.1.0
+info:
+  title: Diapay API
+  version: 0.1.0
+  description: Stripe-like payment API for checkout, direct payments, refunds, payouts, mobile money, crypto and webhooks.
+servers:
+  - url: https://api.diapay.com/api/v1
+  - url: http://localhost:5100/api/v1
+security:
+  - bearerAuth: []
+paths:
+  /checkout/sessions:
+    post:
+      summary: Create checkout session
+      tags: [Checkout]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckoutSessionCreate'}
+      responses:
+        '201': {description: Created}
+  /payments:
+    post:
+      summary: Create payment
+      tags: [Payments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PaymentCreate'}
+      responses:
+        '201': {description: Created}
+  /payments/{id}:
+    get:
+      summary: Retrieve payment
+      tags: [Payments]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Payment}
+  /payments/{id}/refund:
+    post:
+      summary: Refund payment
+      tags: [Refunds]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Refunded payment}
+  /payouts:
+    post:
+      summary: Create payout
+      tags: [Payouts]
+      responses:
+        '201': {description: Created}
+  /webhooks:
+    post:
+      summary: Register webhook endpoint
+      tags: [Webhooks]
+      responses:
+        '201': {description: Created}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    PaymentCreate:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: {type: integer, minimum: 1}
+        currency: {type: string, examples: [XOF]}
+        method: {type: string, enum: [mobile-money, bank-card, bank-transfer, crypto, mock]}
+        phone: {type: string}
+        metadata: {type: object, additionalProperties: true}
+    CheckoutSessionCreate:
+      allOf:
+        - $ref: '#/components/schemas/PaymentCreate'
+        - type: object
+          required: [successUrl, cancelUrl]
+          properties:
+            successUrl: {type: string, format: uri}
+            cancelUrl: {type: string, format: uri}
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: {type: string}
+                  quantity: {type: integer}
+                  amount: {type: integer}
