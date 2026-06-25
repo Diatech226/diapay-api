@@ -1,21 +1,25 @@
 export type WalletType = 'merchant_wallet' | 'vendor_wallet' | 'platform_wallet' | 'escrow_wallet' | 'reserve_wallet';
 export type WalletStatus = 'active' | 'frozen' | 'closed';
-export type Currency = 'XOF' | 'USD' | 'EUR' | 'USDT' | string;
+export type Currency = 'FCFA' | 'XOF' | 'USD' | 'EUR' | 'USDT' | 'USDC' | string;
+export type MarketplaceCurrency = Currency;
+export type PayoutStatus = MarketplacePayoutStatus;
 export type LedgerEntryType = 'debit' | 'credit' | 'fee' | 'reserve' | 'refund' | 'payout' | 'reversal';
 export type LedgerAccountType = 'asset' | 'liability' | 'revenue' | 'expense' | 'reserve' | 'escrow';
 export type EscrowStatus = 'held' | 'released' | 'refunded' | 'disputed';
 export type PayoutMethodType = 'mobile_money' | 'bank_transfer' | 'crypto';
 export type MarketplacePayoutStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'reversed';
 export type KycStatus = 'not_started' | 'pending' | 'verified' | 'rejected';
-export type TimelineEventType = 'payment_created' | 'payment_authorized' | 'payment_captured' | 'split_processed' | 'wallet_updated' | 'escrow_held' | 'payout_created' | 'payout_completed' | 'refund_processed';
+export type TimelineEventType = 'payment_created' | 'payment_authorized' | 'payment_captured' | 'split_processed' | 'wallet_updated' | 'escrow_held' | 'escrow_released' | 'payout_created' | 'payout_completed' | 'refund_processed';
 
 export interface LedgerAccount {
   id: string;
+  walletId?: string;
   ownerId: string;
   ownerType: 'merchant' | 'vendor' | 'platform' | 'escrow' | 'reserve';
   type: LedgerAccountType;
   currency: Currency;
-  normalBalance: 'debit' | 'credit';
+  normalBalance?: 'debit' | 'credit';
+  status?: 'active' | 'closed';
   createdAt: string;
 }
 
@@ -63,15 +67,18 @@ export interface PayoutMethod {
   id: string;
   type: PayoutMethodType;
   label: string;
-  destination: string;
+  destination?: string | Record<string, unknown>;
   currency: Currency;
   country?: string;
+  details?: Record<string, unknown>;
+  active?: boolean;
   default?: boolean;
 }
 
 export interface CommissionRule {
   id: string;
-  scope: 'platform' | 'category' | 'vendor' | 'country' | 'dynamic';
+  name?: string;
+  scope?: 'platform' | 'category' | 'vendor' | 'country' | 'dynamic';
   fixedAmount?: number;
   percentage?: number;
   currency?: Currency;
@@ -96,6 +103,30 @@ export interface VendorAccount {
   updatedAt: string;
 }
 
+export interface SplitRule {
+  id: string;
+  type: 'fixed' | 'percentage' | 'fallback';
+  amount?: number;
+  percentage?: number;
+  priority: number;
+  vendorId?: string;
+  walletId?: string;
+}
+
+export interface MarketplacePayment {
+  id: string;
+  paymentId: string;
+  merchant: string;
+  amount: number;
+  currency: Currency;
+  splitRules: SplitRule[];
+  allocations: SplitAllocation[];
+  escrowId?: string;
+  timeline: Array<TimelineEvent | { type: string; at: string; data?: Record<string, unknown> }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SplitInstruction {
   vendorId?: string;
   walletId?: string;
@@ -113,22 +144,29 @@ export interface SplitAllocation {
   id: string;
   vendorId?: string;
   walletId: string;
-  label: string;
+  label?: string;
   amount: number;
   currency: Currency;
-  type: 'vendor' | 'marketplace_commission' | 'diapay_fee' | 'reserve' | 'fallback';
+  type?: 'vendor' | 'marketplace_commission' | 'diapay_fee' | 'reserve' | 'fallback';
+  destinationType?: string;
+  ruleId?: string;
   status: 'pending' | 'available' | 'held' | 'paid_out' | 'refunded';
-  priority: number;
+  priority?: number;
 }
 
 export interface EscrowHold {
   id: string;
-  paymentId: string;
-  allocationId: string;
+  paymentId?: string;
+  marketplacePaymentId?: string;
+  allocationId?: string;
   walletId: string;
   amount: number;
   currency: Currency;
   status: EscrowStatus;
+  releasedAmount?: number;
+  refundedAmount?: number;
+  releaseMode?: 'auto' | 'manual';
+  allocations?: string[];
   autoReleaseAt?: string;
   releasedAt?: string;
   refundedAt?: string;
@@ -145,8 +183,10 @@ export interface MarketplacePayout {
   method: PayoutMethodType;
   destination: string;
   status: MarketplacePayoutStatus;
-  schedule: 'manual' | 'automatic' | 'scheduled';
+  schedule?: 'manual' | 'automatic' | 'scheduled';
+  scheduledFor?: string;
   threshold?: number;
+  minimumThreshold?: number;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;

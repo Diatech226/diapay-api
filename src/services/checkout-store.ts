@@ -148,7 +148,7 @@ export async function completeCheckoutSession(sessionId: string, payload: Record
 
   if (payment.status === 'succeeded') {
     await emitWebhook('checkout.session.completed', session.merchant, { checkoutSession: session, payment });
-    await emitWebhook('payment.succeeded', session.merchant, { payment, checkoutSession: session });
+    await emitWebhook('payment.paid', session.merchant, { payment, checkoutSession: session });
   } else if (payment.status === 'failed') {
     await emitWebhook('payment.failed', session.merchant, { payment, checkoutSession: session });
   } else if (payment.status === 'expired') {
@@ -241,7 +241,7 @@ export function registerWebhookEndpoint(payload: Record<string, unknown>, mercha
     id: id('we_test'),
     merchant,
     url: payload.url,
-    events: Array.isArray(payload.events) ? payload.events.map(String) : ['payment.succeeded', 'payment.failed'],
+    events: Array.isArray(payload.events) ? payload.events.map(String) : ['payment.paid', 'payment.failed', 'checkout.session.completed'],
     secret: id('whsec_test'),
     status: 'active',
     createdAt: timestamp,
@@ -263,11 +263,13 @@ async function emitWebhook(type: WebhookEventType, merchant: string, data: Recor
   const endpoints = Array.from(webhookEndpoints.values()).filter((endpoint) => endpoint.merchant === merchant && endpoint.status === 'active' && endpoint.events.includes(type));
   await Promise.all(endpoints.map(async (endpoint) => {
     const body = JSON.stringify(event.payload);
-    const signature = crypto.createHmac('sha256', endpoint.secret).update(body).digest('hex');
+    const timestampSeconds = Math.floor(Date.now() / 1000);
+    const digest = crypto.createHmac('sha256', endpoint.secret).update(`${timestampSeconds}.${body}`).digest('hex');
+    const signature = `t=${timestampSeconds},v1=${digest}`;
     const attempt: WebhookDeliveryAttempt = { id: id('del_test'), endpointId: endpoint.id, url: endpoint.url, status: 'pending', signature, createdAt: now() };
     event.attempts.push(attempt);
     try {
-      const response = await fetch(endpoint.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Diapay-Signature': signature }, body });
+      const response = await fetch(endpoint.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Diapay-Signature': signature, 'Diapay-Timestamp': String(timestampSeconds) }, body });
       attempt.status = response.ok ? 'delivered' : 'failed';
       attempt.statusCode = response.status;
     } catch (error) {

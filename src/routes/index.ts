@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { cancelSession, completeSession, createSession, listSessions, publicConfig, retrieveSession } from '../controllers/checkout';
 import { createPayment, getPayment, cancelPayment, refundPayment, listTransactions, listMethods, createWebhook, getBalance, createPayout, listWebhookEventsController, listProviderConfigs } from '../controllers/payments';
+import { deleteApiKey, getApiKeys, listAdmins, listApps, listLogs, listMerchants, postAdmin, postApiKey, postApp, postMerchant, rotateKey } from '../controllers/developer-platform';
 import { createMarketplacePayout, createSplitPayment, createVendor, getMarketplaceAnalytics, getMarketplaceLedger, getVendorWallet, listEscrowHolds, listMarketplacePayouts, listMarketplaceTimeline, listMarketplaceWallets, listVendors, refundEscrow, releaseEscrow } from '../controllers/marketplace';
 
 export const apiRouter = Router();
@@ -35,3 +36,15 @@ apiRouter.get('/marketplace/ledger', getMarketplaceLedger);
 apiRouter.get('/marketplace/wallets', listMarketplaceWallets);
 apiRouter.get('/marketplace/timeline', listMarketplaceTimeline);
 apiRouter.get('/marketplace/analytics', getMarketplaceAnalytics);
+
+apiRouter.get('/merchants', listMerchants);
+apiRouter.post('/merchants', postMerchant);
+apiRouter.get('/merchant-admins', listAdmins);
+apiRouter.post('/merchant-admins', postAdmin);
+apiRouter.get('/apps', listApps);
+apiRouter.post('/apps', postApp);
+apiRouter.get('/api-keys', getApiKeys);
+apiRouter.post('/api-keys', postApiKey);
+apiRouter.delete('/api-keys/:id', deleteApiKey);
+apiRouter.post('/api-keys/:id/rotate', rotateKey);
+apiRouter.get('/logs', listLogs);

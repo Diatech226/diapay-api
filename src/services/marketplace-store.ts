@@ -67,10 +67,13 @@ function createWallet(type: WalletType, owner: MarketplaceWallet['owner'], curre
     ledgerEntries: [],
     createdAt: timestamp,
     updatedAt: timestamp,
+    ledgerAccountId: '',
   };
   wallets.set(wallet.id, wallet);
+  const ledgerAccountId = id('la');
+  wallet.ledgerAccountId = ledgerAccountId;
   ledgerAccounts.set(wallet.id, {
-    id: id('la'),
+    id: ledgerAccountId,
     walletId: wallet.id,
     ownerId: owner.id,
     ownerType: owner.type,
@@ -115,7 +118,7 @@ function applyWalletMovement(walletId: string, amount: number, movement: 'availa
 function recordEntry(entry: Omit<LedgerEntry, 'id' | 'createdAt'>) {
   const created: LedgerEntry = { id: id('le'), createdAt: now(), ...entry };
   ledgerEntries.push(created);
-  const wallet = getWallet(created.walletId);
+  const wallet = getWallet(created.walletId!);
   wallet.ledgerEntries.push(created.id);
   balanceSnapshots.push({
     id: id('bs'),
@@ -315,11 +318,11 @@ export function releaseEscrow(payload: Record<string, unknown>) {
   const escrowId = String(payload.escrowId ?? '');
   const escrow = escrows.get(escrowId);
   if (!escrow) throw Object.assign(new Error('escrow not found'), { status: 404 });
-  const amount = Number(payload.amount ?? (escrow.amount - escrow.releasedAmount - escrow.refundedAmount));
+  const amount = Number(payload.amount ?? (escrow.amount - (escrow.releasedAmount ?? 0) - (escrow.refundedAmount ?? 0)));
   assertAmount(amount);
-  if (amount > escrow.amount - escrow.releasedAmount - escrow.refundedAmount) throw Object.assign(new Error('release amount exceeds escrow remainder'), { status: 409 });
-  const payment = marketplacePayments.get(escrow.marketplacePaymentId);
-  const heldAllocations = payment?.allocations.filter((allocation) => escrow.allocations.includes(allocation.id) && allocation.status === 'held') ?? [];
+  if (amount > escrow.amount - (escrow.releasedAmount ?? 0) - (escrow.refundedAmount ?? 0)) throw Object.assign(new Error('release amount exceeds escrow remainder'), { status: 409 });
+  const payment = marketplacePayments.get(escrow.marketplacePaymentId!);
+  const heldAllocations = payment?.allocations.filter((allocation) => (escrow.allocations ?? []).includes(allocation.id) && allocation.status === 'held') ?? [];
   let remaining = amount;
   for (const allocation of heldAllocations) {
     const release = Math.min(allocation.amount, remaining);
@@ -330,8 +333,8 @@ export function releaseEscrow(payload: Record<string, unknown>) {
     allocation.status = release === allocation.amount ? 'available' : 'held';
     remaining -= release;
   }
-  escrow.releasedAmount += amount;
-  escrow.status = escrow.releasedAmount + escrow.refundedAmount >= escrow.amount ? 'released' : 'held';
+  escrow.releasedAmount = (escrow.releasedAmount ?? 0) + amount;
+  escrow.status = (escrow.releasedAmount ?? 0) + (escrow.refundedAmount ?? 0) >= escrow.amount ? 'released' : 'held';
   escrow.updatedAt = now();
   payment?.timeline.push(createTimeline('wallet_updated'), createTimeline('escrow_released', { escrowId, amount }));
   if (payment) payment.updatedAt = now();
@@ -342,13 +345,13 @@ export function refundEscrow(payload: Record<string, unknown>) {
   const escrowId = String(payload.escrowId ?? '');
   const escrow = escrows.get(escrowId);
   if (!escrow) throw Object.assign(new Error('escrow not found'), { status: 404 });
-  const amount = Number(payload.amount ?? (escrow.amount - escrow.releasedAmount - escrow.refundedAmount));
+  const amount = Number(payload.amount ?? (escrow.amount - (escrow.releasedAmount ?? 0) - (escrow.refundedAmount ?? 0)));
   assertAmount(amount);
   applyWalletMovement(escrow.walletId, amount, 'pending_debit');
-  escrow.refundedAmount += amount;
-  escrow.status = escrow.releasedAmount + escrow.refundedAmount >= escrow.amount ? 'refunded' : 'held';
+  escrow.refundedAmount = (escrow.refundedAmount ?? 0) + amount;
+  escrow.status = (escrow.releasedAmount ?? 0) + (escrow.refundedAmount ?? 0) >= escrow.amount ? 'refunded' : 'held';
   escrow.updatedAt = now();
-  const payment = marketplacePayments.get(escrow.marketplacePaymentId);
+  const payment = marketplacePayments.get(escrow.marketplacePaymentId!);
   payment?.timeline.push(createTimeline('refund_processed', { escrowId, amount }));
   postDoubleEntry({ transactionId: id('txn_refund'), debitWalletId: escrow.walletId, creditWalletId: ensureSystemWallet('reserve_wallet', escrow.currency).id, amount, currency: escrow.currency, type: 'refund', description: 'Escrow refund reserved for customer return', metadata: { escrowId } });
   return escrow;
@@ -377,7 +380,7 @@ export function createMarketplacePayout(payload: Record<string, unknown>) {
     status: payload.scheduledFor ? 'pending' : 'processing',
     scheduledFor: typeof payload.scheduledFor === 'string' ? payload.scheduledFor : undefined,
     minimumThreshold: threshold || undefined,
-    destination: typeof payload.destination === 'object' && payload.destination !== null ? payload.destination as Record<string, unknown> : vendor.payoutMethods[0]?.details ?? {},
+    destination: typeof payload.destination === 'string' ? payload.destination : JSON.stringify(payload.destination ?? vendor.payoutMethods[0]?.details ?? {}),
     createdAt: now(),
     updatedAt: now(),
   };

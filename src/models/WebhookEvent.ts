@@ -1,9 +1,16 @@
 export type WebhookEventType =
+  | 'checkout.session.created'
   | 'checkout.session.completed'
+  | 'payment.created'
+  | 'payment.processing'
+  | 'payment.paid'
   | 'payment.succeeded'
   | 'payment.failed'
   | 'payment.cancelled'
-  | 'payment.expired';
+  | 'payment.expired'
+  | 'payment.refunded'
+  | 'refund.created'
+  | 'refund.succeeded';
 
 export interface WebhookDeliveryAttempt {
   id: string;

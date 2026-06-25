@@ -104,9 +104,9 @@ export class MarketplaceService {
     const escrowHolds: EscrowHold[] = [];
     for (const allocation of allocations) {
       const targetWalletId = allocation.status === 'held' ? this.escrowWallet.id : allocation.walletId;
-      this.applyLedgerEntry(transactionId, targetWalletId, allocation.status === 'held' ? 'reserve' : allocation.type === 'diapay_fee' ? 'fee' : 'credit', 'credit', allocation.amount, currency, allocation.label, { allocationId: allocation.id, beneficiaryWalletId: allocation.walletId });
+      this.applyLedgerEntry(transactionId, targetWalletId, allocation.status === 'held' ? 'reserve' : allocation.type === 'diapay_fee' ? 'fee' : 'credit', 'credit', allocation.amount, currency, allocation.label ?? allocation.type ?? 'allocation', { allocationId: allocation.id, beneficiaryWalletId: allocation.walletId });
       if (allocation.status === 'held') {
-        const hold: EscrowHold = { id: id('esc'), paymentId, allocationId: allocation.id, walletId: allocation.walletId, amount: allocation.amount, currency, status: 'held', autoReleaseAt: payload.escrow?.autoReleaseAt, createdAt: now(), updatedAt: now() };
+        const hold: EscrowHold = { id: id('esc'), paymentId, allocationId: allocation.id, walletId: allocation.walletId, amount: allocation.amount, currency, status: 'held', releasedAmount: 0, refundedAmount: 0, allocations: [allocation.id], autoReleaseAt: payload.escrow?.autoReleaseAt, createdAt: now(), updatedAt: now() };
         this.escrowHolds.set(hold.id, hold);
         escrowHolds.push(hold);
         addEvent('escrow_held', `${allocation.amount} ${currency} held in escrow`, { escrowId: hold.id, walletId: allocation.walletId });
@@ -163,7 +163,7 @@ export class MarketplaceService {
     if (wallet.availableBalance < payload.amount) throw Object.assign(new Error('Insufficient available balance for payout'), { status: 400 });
     const transactionId = id('txn_payout');
     this.applyLedgerEntry(transactionId, wallet.id, 'payout', 'debit', payload.amount, payload.currency ?? wallet.currency, 'Payout debit from vendor wallet');
-    const payout: MarketplacePayout = { id: id('po'), vendorId: vendor?.id ?? payload.vendorId, walletId: wallet.id, amount: payload.amount, currency: payload.currency ?? wallet.currency, method: payload.method ?? 'mobile_money', destination: payload.destination ?? vendor?.payoutMethods.find((method) => method.default)?.destination ?? 'sandbox_destination', status: 'completed', schedule: payload.schedule ?? 'manual', threshold: payload.threshold, createdAt: now(), updatedAt: now(), completedAt: now() };
+    const payout: MarketplacePayout = { id: id('po'), vendorId: vendor?.id ?? payload.vendorId, walletId: wallet.id, amount: payload.amount, currency: payload.currency ?? wallet.currency, method: payload.method ?? 'mobile_money', destination: typeof payload.destination === 'string' ? payload.destination : JSON.stringify(payload.destination ?? vendor?.payoutMethods.find((method) => method.default)?.destination ?? 'sandbox_destination'), status: 'completed', schedule: payload.schedule ?? 'manual', threshold: payload.threshold, createdAt: now(), updatedAt: now(), completedAt: now() };
     this.payouts.set(payout.id, payout);
     this.addTimeline(undefined, 'payout_created', `Payout ${payout.id} created`, { payoutId: payout.id, walletId: wallet.id });
     this.addTimeline(undefined, 'payout_completed', `Payout ${payout.id} completed`, { payoutId: payout.id });
@@ -192,7 +192,7 @@ export class MarketplaceService {
   private applyLedgerEntry(transactionId: string, walletId: string, type: LedgerEntry['type'], direction: LedgerEntry['direction'], amount: number, currency: Currency, description: string, metadata?: Record<string, unknown>) {
     const wallet = this.wallets.get(walletId);
     if (!wallet) throw Object.assign(new Error(`Wallet ${walletId} not found`), { status: 404 });
-    const entry: LedgerEntry = { id: id('le'), transactionId, accountId: wallet.ledgerAccountId, walletId, type, direction, amount, currency, description, metadata, createdAt: now() };
+    const entry: LedgerEntry = { id: id('le'), transactionId, accountId: wallet.ledgerAccountId!, walletId, type, direction, amount, currency, description, metadata, createdAt: now() };
     this.ledgerEntries.set(entry.id, entry);
     wallet.ledgerEntries.push(entry.id);
     if (direction === 'credit') {
